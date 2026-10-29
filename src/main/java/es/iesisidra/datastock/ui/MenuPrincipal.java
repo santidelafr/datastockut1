@@ -13,7 +13,6 @@ public class MenuPrincipal {
         do {
             System.out.println("\n=================================");
             System.out.println(" DATASTOCK GESTIÓN DE INVENTARIO ");
-            System.out.println("           FASE 1 UT1            ");
             System.out.println("=================================");
             System.out.println("1. Explorar ficheros y directorios");
             System.out.println("2. Importar productos desde JSON");
