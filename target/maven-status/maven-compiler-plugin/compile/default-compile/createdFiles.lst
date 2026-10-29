@@ -1,0 +1,7 @@
+es/iesisidra/datastock/complementarias/AccesoAleatorioActividad.class
+es/iesisidra/datastock/util/LectorConsola.class
+es/iesisidra/datastock/App.class
+es/iesisidra/datastock/ui/MenuPrincipal.class
+es/iesisidra/datastock/complementarias/XPathActividad.class
+es/iesisidra/datastock/servicio/Inventario.class
+es/iesisidra/datastock/modelo/Producto.class
