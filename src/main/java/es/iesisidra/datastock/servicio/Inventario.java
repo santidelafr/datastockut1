@@ -88,7 +88,7 @@ public class Inventario {
         return productos.stream().anyMatch(p -> p.getCodigo().equalsIgnoreCase(c));
     }
 
-    // RF-FIC-02: Importar JSON
+    //Metodos para validar JSON
     public void importarJSON(String rutaArchivo) throws Exception {
         Path path = Paths.get(rutaArchivo);
         if (!Files.exists(path) || !Files.isRegularFile(path) || !Files.isReadable(path)) {
