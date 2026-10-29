@@ -29,7 +29,7 @@ public class AccesoAleatorioActividad {
                 raf.setLength(0); // Truncar fichero
                 for (Producto p : listaMemoria) {
                     StringBuffer sb = new StringBuffer(p.getCodigo());
-                    sb.setLength(12); // Rellenar o truncar a 12 caracteres
+                    sb.setLength(12); 
                     raf.writeChars(sb.toString());
                     raf.writeDouble(p.getPrecio().doubleValue());
                     raf.writeInt(p.getStock());
@@ -68,7 +68,7 @@ public class AccesoAleatorioActividad {
                 System.out.print("Nuevo stock: ");
                 int nuevoStock = Integer.parseInt(sc.nextLine());
 
-                // Desplazamiento exacto al campo stock (seek directo)
+                // Desplazamiento exacto al campo stock
                 raf.seek((long) pos * LONGITUD_REGISTRO + 32);
                 raf.writeInt(nuevoStock);
 
