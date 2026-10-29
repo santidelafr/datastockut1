@@ -1,25 +1,28 @@
 {
   "productos": [
     {
-      "id": 1,
-      "nombre": "Teclado Mecánico RGB",
+      "codigo": "P001",
+      "nombre": "Teclado Mecanico RGB",
       "precio": 59.99,
       "stock": 15,
-      "categoria": "Periféricos"
+      "categoriaId": 1,
+      "proveedorId": 1
     },
     {
-      "id": 2,
-      "nombre": "Ratón Inalámbrico",
+      "codigo": "P002",
+      "nombre": "Raton Inalambrico",
       "precio": 25.50,
       "stock": 30,
-      "categoria": "Periféricos"
+      "categoriaId": 1,
+      "proveedorId": 1
     },
     {
-      "id": 3,
+      "codigo": "P003",
       "nombre": "Monitor 24 pulgadas Full HD",
       "precio": 149.90,
       "stock": 8,
-      "categoria": "Pantallas"
+      "categoriaId": 2,
+      "proveedorId": 2
     }
   ]
 }
