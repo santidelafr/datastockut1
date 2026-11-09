@@ -1,25 +1,30 @@
 package es.iesisidra.datastock.ui;
 
 import java.io.File;
+import java.util.List;
 
+import es.iesisidra.datastock.modelo.Producto;
 import es.iesisidra.datastock.servicio.Inventario;
+import es.iesisidra.datastock.util.ConsolaColor;
 import es.iesisidra.datastock.util.LectorConsola;
 
 public class MenuPrincipal {
     private final Inventario inventario = new Inventario();
+    private final MenuMySQL menuMySQL = new MenuMySQL(inventario);
 
     public void iniciar() {
         int opcion = -1;
         do {
-            System.out.println("\n=================================");
-            System.out.println(" DATASTOCK GESTIÓN DE INVENTARIO ");
-            System.out.println("=================================");
-            System.out.println("1. Explorar ficheros y directorios");
-            System.out.println("2. Importar productos desde JSON");
-            System.out.println("3. Importar productos desde XML");
-            System.out.println("4. Consultar productos");
-            System.out.println("5. Exportar productos");
-            System.out.println("6. Guardar y recuperar inventario");
+            System.out.println("\n================================================");
+            System.out.println("        DATASTOCK - GESTIÓN DE INVENTARIO       ");
+            System.out.println("================================================");
+            System.out.println("1. Explorar ficheros y directorios (UT1)");
+            System.out.println("2. Importar productos desde JSON (UT1)");
+            System.out.println("3. Importar productos desde XML (UT1)");
+            System.out.println("4. Consultar productos en memoria (UT1)");
+            System.out.println("5. Exportar productos (UT1)");
+            System.out.println("6. Guardar y recuperar inventario (UT1)");
+            System.out.println("7. Gestionar base de datos MySQL (UT2)");
             System.out.println("0. Salir");
             System.out.print("Selecciona una opción: ");
 
@@ -44,17 +49,20 @@ public class MenuPrincipal {
                     case 6:
                         menuSerializacion();
                         break;
+                    case 7:
+                        menuMySQL.iniciar();
+                        break;
                     case 0:
                         System.out.println("¡Hasta pronto!");
                         break;
                     default:
-                        System.out.println("Opción no válida.");
+                        ConsolaColor.aviso("Opción no válida.");
                         break;
                 }
             } catch (NumberFormatException e) {
-                System.out.println("Error: Introduce un número válido.");
+                ConsolaColor.error("Introduce un número válido.");
             } catch (Exception e) {
-                System.out.println("Error: " + e.getMessage());
+                ConsolaColor.error(e.getMessage());
             }
         } while (opcion != 0);
     }
@@ -65,7 +73,7 @@ public class MenuPrincipal {
         File file = new File(entrada);
 
         if (!file.exists()) {
-            System.out.println("Error: La ruta especificada no existe.");
+            ConsolaColor.error("La ruta especificada no existe.");
             return;
         }
 
@@ -100,8 +108,10 @@ public class MenuPrincipal {
         String ruta = LectorConsola.leerTexto();
         try {
             inventario.importarJSON(ruta);
+            ConsolaColor.ok("Fichero JSON procesado. Productos disponibles en memoria: " +
+                    inventario.getProductos().size());
         } catch (Exception e) {
-            System.out.println("Error al importar JSON: " + e.getMessage());
+            ConsolaColor.error("Error al importar JSON: " + e.getMessage());
         }
     }
 
@@ -110,15 +120,17 @@ public class MenuPrincipal {
         String ruta = LectorConsola.leerTexto();
         try {
             inventario.importarXML(ruta);
+            ConsolaColor.ok("Fichero XML procesado. Productos disponibles en memoria: " +
+                    inventario.getProductos().size());
         } catch (Exception e) {
-            System.out.println("Error al importar XML: " + e.getMessage());
+            ConsolaColor.error("Error al importar XML: " + e.getMessage());
         }
     }
 
     private void menuConsultar() {
         int sub = -1;
         do {
-            System.out.println("\n--- CONSULTA DE PRODUCTOS ---");
+            System.out.println("\n--- CONSULTA DEL INVENTARIO EN MEMORIA (UT1) ---");
             System.out.println("1. Listar todos los productos");
             System.out.println("2. Buscar producto por código");
             System.out.println("3. Buscar productos por nombre");
@@ -128,26 +140,42 @@ public class MenuPrincipal {
                 sub = Integer.parseInt(LectorConsola.leerTexto());
                 switch (sub) {
                     case 1:
-                        inventario.listarOrdenados();
+                        List<Producto> todos = inventario.listarOrdenados();
+                        if (todos.isEmpty()) {
+                            System.out.println("No hay productos cargados en memoria.");
+                        } else {
+                            todos.forEach(System.out::println);
+                            System.out.println("Total en memoria: " + todos.size());
+                        }
                         break;
                     case 2:
                         System.out.print("Código: ");
                         String cod = LectorConsola.leerTexto();
-                        inventario.buscarPorCodigo(cod);
+                        Producto encontrado = inventario.buscarPorCodigo(cod);
+                        if (encontrado == null) {
+                            System.out.println("No se encontró ningún producto en memoria con ese código.");
+                        } else {
+                            System.out.println(encontrado);
+                        }
                         break;
                     case 3:
                         System.out.print("Nombre a buscar: ");
                         String nom = LectorConsola.leerTexto();
-                        inventario.buscarPorNombre(nom);
+                        List<Producto> coincidencias = inventario.buscarPorNombre(nom);
+                        if (coincidencias.isEmpty()) {
+                            System.out.println("No se encontraron coincidencias en memoria.");
+                        } else {
+                            coincidencias.forEach(System.out::println);
+                        }
                         break;
                     case 0:
                         break;
                     default:
-                        System.out.println("Opción inválida.");
+                        ConsolaColor.aviso("Opción inválida.");
                         break;
                 }
             } catch (Exception e) {
-                System.out.println("Entrada inválida.");
+                ConsolaColor.error("Entrada inválida.");
             }
         } while (sub != 0);
     }
@@ -165,8 +193,7 @@ public class MenuPrincipal {
                 String ruta = LectorConsola.leerTexto();
                 File f = new File(ruta);
                 if (f.exists()) {
-                    System.out.print("El fichero ya existe. ¿Sobrescribir? (S/N): ");
-                    if (!LectorConsola.leerTexto().equalsIgnoreCase("S")) {
+                    if (!ConsolaColor.confirmar("El fichero ya existe. ¿Sobrescribir?")) {
                         System.out.println("Operación cancelada.");
                         return;
                     }
@@ -176,10 +203,10 @@ public class MenuPrincipal {
                 } else {
                     inventario.exportarXML(ruta);
                 }
-                System.out.println("Exportación realizada con éxito.");
+                ConsolaColor.ok("Exportación realizada con éxito.");
             }
         } catch (Exception e) {
-            System.out.println("Error al exportar: " + e.getMessage());
+            ConsolaColor.error("Error al exportar: " + e.getMessage());
         }
     }
 
@@ -196,19 +223,18 @@ public class MenuPrincipal {
                 String ruta = LectorConsola.leerTexto();
                 File f = new File(ruta);
                 if (f.exists()) {
-                    System.out.print("Fichero existente. ¿Sobrescribir? (S/N): ");
-                    if (!LectorConsola.leerTexto().equalsIgnoreCase("S")) return;
+                    if (!ConsolaColor.confirmar("Fichero existente. ¿Sobrescribir?")) return;
                 }
                 inventario.guardarSerializado(ruta);
-                System.out.println("Inventario guardado correctamente.");
+                ConsolaColor.ok("Inventario guardado correctamente.");
             } else if (op == 2) {
                 System.out.print("Ruta del fichero .dat: ");
                 String ruta = LectorConsola.leerTexto();
                 inventario.recuperarSerializado(ruta);
-                System.out.println("Inventario recuperado correctamente.");
+                ConsolaColor.ok("Inventario recuperado correctamente.");
             }
         } catch (Exception e) {
-            System.out.println("Error en la operación: " + e.getMessage());
+            ConsolaColor.error("Error en la operación: " + e.getMessage());
         }
     }
 }
