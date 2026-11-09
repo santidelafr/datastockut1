@@ -6,9 +6,11 @@ import java.util.List;
 
 import es.iesisidra.datastock.config.ConexionBD;
 import es.iesisidra.datastock.dao.CategoriaDAO;
+import es.iesisidra.datastock.dao.MovimientoDAO;
 import es.iesisidra.datastock.dao.ProductoDAO;
 import es.iesisidra.datastock.dao.ProveedorDAO;
 import es.iesisidra.datastock.modelo.Categoria;
+import es.iesisidra.datastock.modelo.MovimientoStock;
 import es.iesisidra.datastock.modelo.Producto;
 import es.iesisidra.datastock.modelo.ProductoDetalle;
 import es.iesisidra.datastock.modelo.Proveedor;
@@ -26,6 +28,7 @@ public class MenuMySQL {
     private final CategoriaDAO categoriaDAO = new CategoriaDAO();
     private final ProveedorDAO proveedorDAO = new ProveedorDAO();
     private final ProductoDAO productoDAO = new ProductoDAO();
+    private final MovimientoDAO movimientoDAO = new MovimientoDAO();
     private final ServicioTransaccionesBD servicioTransacciones = new ServicioTransaccionesBD();
 
     public MenuMySQL(Inventario inventarioMemoria) {
@@ -43,6 +46,10 @@ public class MenuMySQL {
             System.out.println("3. Gestionar proveedores");
             System.out.println("4. Gestionar productos (CRUD)");
             System.out.println("5. Consultar y buscar productos");
+            System.out.println("6. Registrar entrada o salida de stock");
+            System.out.println("7. Consultar historial de movimientos");
+            System.out.println("8. Importar productos de memoria a MySQL");
+            System.out.println("9. Demostración de transacción con commit/rollback");
             System.out.println("0. Volver al menú principal");
             System.out.print("Selecciona una opción: ");
 
@@ -63,10 +70,22 @@ public class MenuMySQL {
                 case 5:
                     menuConsultasProductos();
                     break;
+                case 6:
+                    menuMovimientosStock();
+                    break;
+                case 7:
+                    menuHistorial();
+                    break;
+                case 8:
+                    servicioTransacciones.importarProductosDeMemoria(inventarioMemoria.getProductos());
+                    break;
+                case 9:
+                    servicioTransacciones.ejecutarDemostracionTransacciones();
+                    break;
                 case 0:
                     break;
                 default:
-                    ConsolaColor.aviso("Opción no válida.");
+                    ConsolaColor.aviso("Opción no válida. Selecciona una opción entre 0 y 9.");
                     break;
             }
         } while (opcion != 0);
@@ -800,6 +819,164 @@ public class MenuMySQL {
         }
         System.out.println("----------------------------------------------------------------------------------------------------------------");
         System.out.println("Total de productos encontrados: " + lista.size());
+    }
+
+    // ==================== 7.6 SUBMENÚ DE MOVIMIENTOS DE STOCK ====================
+
+    private void menuMovimientosStock() {
+        int op = -1;
+        do {
+            System.out.println("\n--- MENÚ DE MOVIMIENTOS ---");
+            System.out.println("1. Registrar una ENTRADA de stock");
+            System.out.println("2. Registrar una SALIDA de stock");
+            System.out.println("0. Volver al menú MySQL");
+            System.out.print("Selecciona una opción: ");
+
+            op = leerOpcionMenu();
+            switch (op) {
+                case 1:
+                    registrarMovimiento("ENTRADA");
+                    break;
+                case 2:
+                    registrarMovimiento("SALIDA");
+                    break;
+                case 0:
+                    break;
+                default:
+                    ConsolaColor.aviso("Opción no válida.");
+                    break;
+            }
+        } while (op != 0);
+    }
+
+    private void registrarMovimiento(String tipo) {
+        System.out.println("\nREGISTRAR " + tipo + " DE STOCK");
+        System.out.println("----------------------------------------");
+        System.out.print("Código del producto: ");
+        String codigo = ValidadorBD.normalizarCodigo(LectorConsola.leerTexto());
+        if (codigo.isEmpty()) {
+            ConsolaColor.error("El código del producto es obligatorio.");
+            return;
+        }
+
+        try {
+            ProductoDetalle actual = productoDAO.buscarPorCodigo(codigo);
+            if (actual == null) {
+                ConsolaColor.error("El producto con código '" + codigo + "' no existe en MySQL.");
+                return;
+            }
+
+            System.out.println("Producto: " + actual.getNombre() + " | Stock actual: " + actual.getStock());
+            Integer cantidad = pedirEnteroPositivo("Cantidad de unidades (> 0): ");
+            if (cantidad == null) return;
+
+            if (!ConsolaColor.confirmar("¿Confirmas registrar la " + tipo + " de " + cantidad +
+                    " unidades para el producto " + codigo + "?")) {
+                System.out.println("Operación cancelada.");
+                return;
+            }
+
+            // Se delega el cálculo y la transacción en el procedimiento almacenado de MySQL
+            movimientoDAO.registrarMovimiento(codigo, tipo, cantidad);
+
+            MovimientoStock ultimo = movimientoDAO.obtenerUltimoMovimientoProducto(codigo);
+            ConsolaColor.ok("Movimiento registrado correctamente.");
+            if (ultimo != null) {
+                System.out.printf("Resultado -> Tipo: %s | Cantidad: %d | Stock anterior: %d -> Stock posterior: %d%n",
+                        ultimo.getTipo(), ultimo.getCantidad(), ultimo.getStockAnterior(), ultimo.getStockPosterior());
+            }
+        } catch (SQLException e) {
+            if (e.getMessage() != null && e.getMessage().contains("Stock insuficiente")) {
+                try {
+                    ProductoDetalle p = productoDAO.buscarPorCodigo(codigo);
+                    int stockActual = p != null ? p.getStock() : 0;
+                    ConsolaColor.error("Stock insuficiente. El stock permanece en " + stockActual + ".");
+                } catch (SQLException ex2) {
+                    ConsolaColor.error("Stock insuficiente.");
+                }
+            } else {
+                ConsolaColor.error(ConexionBD.traducirErrorSQL(e));
+            }
+        }
+    }
+
+    // ==================== 7.7 SUBMENÚ DE HISTORIAL ====================
+
+    private void menuHistorial() {
+        int op = -1;
+        do {
+            System.out.println("\n--- MENÚ DE HISTORIAL ---");
+            System.out.println("1. Consultar todos los movimientos");
+            System.out.println("2. Consultar movimientos de un producto");
+            System.out.println("0. Volver al menú MySQL");
+            System.out.print("Selecciona una opción: ");
+
+            op = leerOpcionMenu();
+            switch (op) {
+                case 1:
+                    consultarHistorialCompleto();
+                    break;
+                case 2:
+                    consultarHistorialProducto();
+                    break;
+                case 0:
+                    break;
+                default:
+                    ConsolaColor.aviso("Opción no válida.");
+                    break;
+            }
+        } while (op != 0);
+    }
+
+    private void consultarHistorialCompleto() {
+        try {
+            List<MovimientoStock> lista = movimientoDAO.listarTodos();
+            if (lista.isEmpty()) {
+                ConsolaColor.aviso("Sin movimientos registrados en el historial.");
+                return;
+            }
+            imprimirTablaMovimientos("HISTORIAL COMPLETO DE MOVIMIENTOS", lista);
+        } catch (SQLException e) {
+            ConsolaColor.error(ConexionBD.traducirErrorSQL(e));
+        }
+    }
+
+    private void consultarHistorialProducto() {
+        System.out.print("Código del producto: ");
+        String codigo = ValidadorBD.normalizarCodigo(LectorConsola.leerTexto());
+        if (codigo.isEmpty()) {
+            ConsolaColor.error("Debes introducir el código del producto.");
+            return;
+        }
+
+        try {
+            if (!productoDAO.existeCodigo(codigo)) {
+                ConsolaColor.error("No existe ningún producto con el código '" + codigo + "' en MySQL.");
+                return;
+            }
+
+            List<MovimientoStock> lista = movimientoDAO.listarPorProducto(codigo);
+            if (lista.isEmpty()) {
+                ConsolaColor.aviso("Sin movimientos registrados.");
+                return;
+            }
+            imprimirTablaMovimientos("HISTORIAL DE MOVIMIENTOS DEL PRODUCTO " + codigo, lista);
+        } catch (SQLException e) {
+            ConsolaColor.error(ConexionBD.traducirErrorSQL(e));
+        }
+    }
+
+    private void imprimirTablaMovimientos(String titulo, List<MovimientoStock> lista) {
+        System.out.println("\n" + titulo);
+        System.out.println("------------------------------------------------------------------------------------------");
+        System.out.printf("%-6s | %-19s | %-12s | %-7s | %8s | %10s | %10s%n",
+                "ID", "FECHA Y HORA", "PRODUCTO", "TIPO", "CANTIDAD", "STOCK ANT.", "STOCK POST.");
+        System.out.println("------------------------------------------------------------------------------------------");
+        for (MovimientoStock m : lista) {
+            System.out.println(m);
+        }
+        System.out.println("------------------------------------------------------------------------------------------");
+        System.out.println("Total de movimientos: " + lista.size());
     }
 
     // ==================== AUXILIARES DE LECTURA ====================
