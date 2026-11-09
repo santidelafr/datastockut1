@@ -1,0 +1,14 @@
+# Compilados de Maven
+target/
+
+# Credenciales locales de conexión JDBC (UT2)
+config/db.properties
+
+# Base de datos local generada en la demo de SQLite
+datos/sqlite/*.db
+datos/sqlite/*.db-journal
+datos/sqlite/*.db-wal
+
+# Archivos del sistema e IDE
+.DS_Store
+*.log
