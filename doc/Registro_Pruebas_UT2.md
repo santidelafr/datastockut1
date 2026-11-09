@@ -56,3 +56,38 @@ Santiago de la Fuente Redondo
 | **CP-JDBC-14** | Opción `7 -> 6 -> 2`: Intentar una `SALIDA` superior al stock disponible. | Producto `"TEC-001"` (stock actual `9`), tipo `SALIDA`, cantidad `20`, confirmar `S`. | El procedimiento lanza `SIGNAL SQLSTATE '45000' ('Stock insuficiente')` y ejecuta `ROLLBACK`; Java muestra `[ERROR] Stock insuficiente. El stock permanece en 9.` en rojo; no se añade fila en `movimiento_stock`. | Muestra error en rojo; `producto.stock` sigue en `9` y `movimiento_stock` no contiene ningún registro fallido. | SUPERADA |
 
 ---
+
+### RF-JDBC-06: Consultar historial de movimientos
+
+| ID Caso | Operación realizada | Datos utilizados | Resultado esperado | Resultado obtenido | Estado |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **CP-JDBC-15** | Opción `7 -> 7 -> 1` (Historial completo) y `7 -> 7 -> 2` (Filtrado por código). | Código `"TEC-001"`. | Muestra movimientos con `ID`, `FECHA Y HORA`, `PRODUCTO`, `TIPO`, `CANTIDAD`, `STOCK ANT.` y `STOCK POST.`, ordenados por `fecha ASC, id ASC`, sin alterar ningún dato. | Listado cronológico estable con todos los campos tanto en vista global como filtrada por `TEC-001`. | SUPERADA |
+| **CP-JDBC-16** | Opción `7 -> 7 -> 2`: Consultar movimientos de un producto existente sin movimientos y de un código inexistente. | 1) Producto `"RAT-002"` (sin movimientos); 2) Código `"NO-EXISTE"`. | Para `"RAT-002"` muestra `[AVISO] Sin movimientos registrados.` sin error. Para `"NO-EXISTE"` informa expresamente con `[ERROR]` de que el producto no existe en MySQL. | Diferencia claramente entre producto existente sin historial y producto inexistente. | SUPERADA |
+
+---
+
+### RF-JDBC-07: Importación controlada desde la UT1
+
+| ID Caso | Operación realizada | Datos utilizados | Resultado esperado | Resultado obtenido | Estado |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **CP-JDBC-17** | Importar JSON en UT1 (opción `2`) y ejecutar `7 -> 8` dos veces siguiendo el recorrido del apartado 6.1. | `datos/ejemplos/productos_ut2_ejemplo.json` (`TEC-001`, `RAT-002`, `MON-003`). 1ª vez: sin proveedor `3`; 2ª vez: tras crear proveedor `3`. | 1ª ejecución: inserta `2` (`TEC-001`, `RAT-002`), omite `0`, rechaza `1` (`MON-003` por proveedor `3` inexistente). 2ª ejecución: inserta `1` (`MON-003`), omite `2` por duplicado, rechaza `0`. Memoria UT1 intacta. | Resúmenes exactos (`2/0/1` y después `1/2/0`), con `commit()` del lote válido y colección en memoria conservada. | SUPERADA |
+| **CP-JDBC-18** | Fallo SQL inesperado durante la ejecución del lote transaccional en `7 -> 8`. | Lote con `setAutoCommit(false)` provocando fallo SQL en mitad de la transacción (p. ej. restricción/bloqueo concurrente en BD antes del `commit`). | Se captura `SQLException`, se ejecuta `conn.rollback()`, el contador de insertados queda en `0` y no permanece insertado ningún producto parcial del lote en MySQL. | `rollback()` revierte todas las inserciones previas del lote y muestra aviso de reversión completa en rojo. | SUPERADA |
+
+---
+
+### RF-JDBC-08: Transacción JDBC de demostración
+
+| ID Caso | Operación realizada | Datos utilizados | Resultado esperado | Resultado obtenido | Estado |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **CP-JDBC-19** | Opción `7 -> 9`: Escenario A de la demostración de transacciones. | Categorías de prueba libres `ID 9001` (`Demo Commit 9001`) e `ID 9002` (`Demo Commit 9002`), confirmar `S`. | Desactiva `autoCommit`, inserta ambas categorías con `PreparedStatement`, ejecuta `commit()`, comprueba con `SELECT` que ambas existen y muestra `[OK]` en verde. | Ambas categorías (`9001` y `9002`) quedan persistidas y verificadas en MySQL. | SUPERADA |
+| **CP-JDBC-20** | Opción `7 -> 9`: Escenario B de la demostración de transacciones. | Inserción de categoría `ID 9003` (`Demo Rollback 9003`) seguida de segunda inserción con `ID 9003` duplicado en la misma transacción. | La 2ª inserción lanza `SQLException` (`1062`), se captura, se ejecuta `rollback()`, se verifica con `SELECT` que `9003` **no** existe en MySQL, se restaura `autoCommit` y se documenta la limpieza. | Error `1062` capturado, `rollback()` confirmado, `ID 9003` ausente en MySQL y `autoCommit` restaurado a `true`. | SUPERADA |
+
+---
+
+## 2. Casos de Prueba de la Actividad Comparativa SQLite (`CP-SQLITE-01` a `CP-SQLITE-03`)
+
+| ID Caso | Operación realizada | Datos utilizados | Resultado esperado | Resultado obtenido | Estado |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **CP-SQLITE-01** | Primera ejecución independiente de `DemoSQLite` sin que exista `datos/sqlite/productos_demo.db`. | `mvn exec:java -Dexec.mainClass="es.iesisidra.datastock.complementarias.DemoSQLite"` con registros `SQL-001` y `SQL-002`. | Crea la carpeta `datos/sqlite` y el archivo `productos_demo.db`, crea la tabla `producto_demo`, muestra `Insertados: 2 | Ya existentes: 0` y lista `SQL-001` y `SQL-002`. | Salida exacta con `[OK]`, `Insertados: 2 | Ya existentes: 0` y las dos filas recuperadas por `ResultSet`. | SUPERADA |
+| **CP-SQLITE-02** | Segunda ejecución consecutiva de `DemoSQLite` sobre el mismo fichero `.db`. | Misma orden Maven sobre `datos/sqlite/productos_demo.db` ya existente. | `INSERT OR IGNORE` evita duplicados y errores de PK; muestra `Insertados: 0 | Ya existentes: 2` y el `SELECT` sigue devolviendo únicamente las dos filas (`SQL-001` y `SQL-002`). | Muestra `Insertados: 0 | Ya existentes: 2` y las dos únicas filas sin duplicados. | SUPERADA |
+| **CP-SQLITE-03** | Comprobación de cierre de recursos JDBC y persistencia del fichero local tras finalizar el proceso. | Inspección del sistema de archivos en `datos/sqlite/productos_demo.db` tras terminar `DemoSQLite`. | `Connection`, `Statement`, `PreparedStatement` y `ResultSet` se cierran mediante `try-with-resources` sin bloqueos y el archivo `productos_demo.db` permanece en disco con tamaño > 0 bytes. | Mensaje final `[OK] Recursos cerrados. Fichero persistente verificado (...)` y archivo `.db` presente en `datos/sqlite/`. | SUPERADA |
