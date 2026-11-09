@@ -1,0 +1,8 @@
+# Plantilla de configuración local para MySQL (UT2)
+# Copia este fichero como config/db.properties y rellena tus credenciales locales.
+# El archivo config/db.properties está excluido en .gitignore para no publicar contraseñas.
+# También puedes usar las variables de entorno JDBC_URL, JDBC_USER y JDBC_PASSWORD.
+
+db.url=jdbc:mysql://localhost:3306/datastock?serverTimezone=UTC&useSSL=false&allowPublicKeyRetrieval=true
+db.user=root
+db.password=TU_PASSWORD_AQUI
