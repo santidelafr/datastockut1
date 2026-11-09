@@ -98,3 +98,22 @@ mvn exec:java -Dexec.mainClass="es.iesisidra.datastock.complementarias.DemoSQLit
 ```
 
 ---
+
+## 7. Comparativa MySQL y SQLite (Actividad obligatoria - Apartado 7.4)
+
+| Criterio | MySQL (Gestor independiente cliente/servidor) | SQLite (Gestor embebido) |
+| :--- | :--- | :--- |
+| **¿Necesita servidor?** | **Sí.** Requiere instalar y tener en ejecución el servicio `mysqld` escuchando peticiones por red/puerto (por defecto `3306`). | **No.** Es un motor *serverless* embebido: la biblioteca JDBC lee y escribe directamente sobre el fichero desde el propio proceso Java. |
+| **¿Dónde se guardan los datos?** | En el directorio de datos gestionado internamente por el servidor MySQL (p. ej. `/var/lib/mysql` o `ProgramData\MySQL`), accesible mediante sockets/TCP. | En un **único fichero local** dentro de la ruta indicada del proyecto (p. ej. `datos/sqlite/productos_demo.db`). |
+| **¿Cómo se establece la conexión JDBC?** | `DriverManager.getConnection(url, user, password)` usando `jdbc:mysql://host:puerto/datastock` y autenticación con usuario y contraseña. | `DriverManager.getConnection("jdbc:sqlite:datos/sqlite/productos_demo.db")` indicando solo la ruta del archivo, sin usuario ni contraseña de red. |
+| **¿Qué dependencia se utiliza?** | `com.mysql:mysql-connector-j` (`8.4.0`). | `org.xerial:sqlite-jdbc` (`3.46.1.3`). |
+| **Ventajas** | Alta concurrencia multiusuario, control granular de permisos y usuarios, procedimientos almacenados (`registrar_movimiento`), bloqueos a nivel de fila (`InnoDB` + `FOR UPDATE`) y escalabilidad en red. | Cero administración e instalación, muy ligero, portable en un solo archivo `.db` e ideal para pruebas rápidas o almacenamiento local. |
+| **Inconvenientes** | Requiere instalar, configurar y mantener un servidor activo, gestionar credenciales y mayor consumo de recursos. | Escrituras concurrentes muy limitadas (bloqueo a nivel de fichero/base de datos), sin gestión nativa de usuarios de red ni procedimientos almacenados (`CALL`). |
+| **¿Para qué tipo de aplicación lo elegirías?** | Aplicaciones empresariales, backends web, sistemas multiusuario en red o inventarios compartidos donde varios puestos consultan y actualizan el stock simultáneamente con fuertes garantías transaccionales. | Aplicaciones móviles (Android), utilidades de escritorio monousuario, catálogos locales offline, dispositivos IoT o prototipos y tests locales. |
+
+### ¿Qué es un pool de conexiones y por qué DataStock usa conexiones cortas?
+
+Un **pool de conexiones** (como *HikariCP* o *Apache DBCP*) es un componente que mantiene un conjunto de conexiones JDBC ya abiertas y listas para reutilizarse. Cuando la aplicación necesita ejecutar una sentencia SQL, toma prestada una conexión libre del *pool* y, al cerrarla (`conn.close()`), la conexión no se destruye físicamente sino que regresa al *pool* para la siguiente petición.
+
+* **¿Cuándo resulta útil?** Es imprescindible en **aplicaciones web, APIs REST o servidores concurrentes** que reciben decenas o cientos de peticiones por segundo, porque abrir una conexión física TCP, negociar TLS y autenticar contra MySQL en cada petición tendría un coste de tiempo y CPU muy elevado, además de poder agotar el límite de conexiones del servidor.
+* **¿Por qué DataStock puede funcionar con conexiones cortas y bien cerradas?** Porque DataStock es una **aplicación interactiva de consola para un único usuario**, donde las operaciones SQL ocurren a ritmo humano (una acción cada varios segundos tras introducir datos por teclado). En este escenario no hay cuello de botella por concurrencia; abrir la conexión bajo demanda y cerrarla inmediatamente al terminar el bloque `try-with-resources` mantiene el diseño sencillo, evita dejar conexiones colgadas o inactivas por *timeout* mientras el usuario está en un menú y garantiza la liberación inmediata de `Connection`, `PreparedStatement`, `CallableStatement` y `ResultSet`.
