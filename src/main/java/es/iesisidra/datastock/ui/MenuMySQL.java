@@ -1,12 +1,16 @@
 package es.iesisidra.datastock.ui;
 
+import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.util.List;
 
 import es.iesisidra.datastock.config.ConexionBD;
 import es.iesisidra.datastock.dao.CategoriaDAO;
+import es.iesisidra.datastock.dao.ProductoDAO;
 import es.iesisidra.datastock.dao.ProveedorDAO;
 import es.iesisidra.datastock.modelo.Categoria;
+import es.iesisidra.datastock.modelo.Producto;
+import es.iesisidra.datastock.modelo.ProductoDetalle;
 import es.iesisidra.datastock.modelo.Proveedor;
 import es.iesisidra.datastock.servicio.Inventario;
 import es.iesisidra.datastock.servicio.ServicioTransaccionesBD;
@@ -21,6 +25,7 @@ public class MenuMySQL {
     private final Inventario inventarioMemoria;
     private final CategoriaDAO categoriaDAO = new CategoriaDAO();
     private final ProveedorDAO proveedorDAO = new ProveedorDAO();
+    private final ProductoDAO productoDAO = new ProductoDAO();
     private final ServicioTransaccionesBD servicioTransacciones = new ServicioTransaccionesBD();
 
     public MenuMySQL(Inventario inventarioMemoria) {
@@ -36,6 +41,8 @@ public class MenuMySQL {
             System.out.println("1. Comprobar conexión y mostrar información de la BD");
             System.out.println("2. Gestionar categorías");
             System.out.println("3. Gestionar proveedores");
+            System.out.println("4. Gestionar productos (CRUD)");
+            System.out.println("5. Consultar y buscar productos");
             System.out.println("0. Volver al menú principal");
             System.out.print("Selecciona una opción: ");
 
@@ -49,6 +56,12 @@ public class MenuMySQL {
                     break;
                 case 3:
                     menuProveedores();
+                    break;
+                case 4:
+                    menuProductosCRUD();
+                    break;
+                case 5:
+                    menuConsultasProductos();
                     break;
                 case 0:
                     break;
@@ -427,6 +440,366 @@ public class MenuMySQL {
                 ConsolaColor.error(ConexionBD.traducirErrorSQL(e));
             }
         }
+    }
+
+    // ==================== 7.4 SUBMENÚ CRUD DE PRODUCTOS ====================
+
+    private void menuProductosCRUD() {
+        int op = -1;
+        do {
+            System.out.println("\n--- MENÚ DE PRODUCTOS ---");
+            System.out.println("1. Dar de alta un producto");
+            System.out.println("2. Consultar producto por código");
+            System.out.println("3. Modificar un producto");
+            System.out.println("4. Eliminar un producto");
+            System.out.println("0. Volver al menú MySQL");
+            System.out.print("Selecciona una opción: ");
+
+            op = leerOpcionMenu();
+            switch (op) {
+                case 1:
+                    altaProducto();
+                    break;
+                case 2:
+                    consultarProductoPorCodigo();
+                    break;
+                case 3:
+                    modificarProducto();
+                    break;
+                case 4:
+                    eliminarProducto();
+                    break;
+                case 0:
+                    break;
+                default:
+                    ConsolaColor.aviso("Opción no válida.");
+                    break;
+            }
+        } while (op != 0);
+    }
+
+    private void altaProducto() {
+        System.out.println("\nALTA DE PRODUCTO");
+        System.out.println("----------------------------------------");
+        System.out.print("Código (1-12 caracteres, A-Z, 0-9 o guion): ");
+        String codigo = ValidadorBD.normalizarCodigo(LectorConsola.leerTexto());
+
+        String errCodigo = ValidadorBD.validarCodigoProducto(codigo);
+        if (errCodigo != null) {
+            ConsolaColor.error(errCodigo);
+            return;
+        }
+
+        try {
+            if (productoDAO.existeCodigo(codigo)) {
+                ConsolaColor.error("El producto con código " + codigo + " ya existe en MySQL.");
+                return;
+            }
+
+            System.out.print("Nombre (3-100 caracteres): ");
+            String nombre = LectorConsola.leerTexto();
+            String errNombre = ValidadorBD.validarNombreProducto(nombre);
+            if (errNombre != null) {
+                ConsolaColor.error(errNombre);
+                return;
+            }
+
+            System.out.print("Precio (> 0, máx. 2 decimales): ");
+            BigDecimal precio;
+            try {
+                precio = ValidadorBD.parsearPrecio(LectorConsola.leerTexto());
+            } catch (IllegalArgumentException ex) {
+                ConsolaColor.error(ex.getMessage());
+                return;
+            }
+
+            Integer stock = pedirEnteroNoNegativo("Stock inicial (>= 0): ");
+            if (stock == null) return;
+
+            Integer categoriaId = pedirEnteroPositivo("ID de categoría: ");
+            if (categoriaId == null) return;
+            if (!categoriaDAO.existeId(categoriaId)) {
+                ConsolaColor.error("No existe la categoría con ID " + categoriaId + " en MySQL.");
+                return;
+            }
+
+            Integer proveedorId = pedirEnteroPositivo("ID de proveedor: ");
+            if (proveedorId == null) return;
+            if (!proveedorDAO.existeId(proveedorId)) {
+                ConsolaColor.error("No existe el proveedor con ID " + proveedorId + " en MySQL.");
+                return;
+            }
+
+            Producto nuevo = new Producto(codigo, nombre, precio, stock, categoriaId, proveedorId);
+            int filas = productoDAO.insertar(nuevo);
+            if (filas > 0) {
+                ConsolaColor.ok("Producto " + codigo + " guardado correctamente.");
+            }
+        } catch (SQLException e) {
+            ConsolaColor.error(ConexionBD.traducirErrorSQL(e));
+        }
+    }
+
+    private void consultarProductoPorCodigo() {
+        System.out.print("Introduce el código del producto: ");
+        String codigo = ValidadorBD.normalizarCodigo(LectorConsola.leerTexto());
+        if (codigo.isEmpty()) {
+            ConsolaColor.error("Debes indicar un código de producto.");
+            return;
+        }
+
+        try {
+            ProductoDetalle detalle = productoDAO.buscarPorCodigo(codigo);
+            if (detalle == null) {
+                ConsolaColor.aviso("No existe ningún producto con el código '" + codigo + "' en MySQL.");
+                return;
+            }
+            System.out.println("\nFICHA DEL PRODUCTO");
+            System.out.println("----------------------------------------");
+            System.out.println(detalle.formatearFicha());
+            System.out.println("----------------------------------------");
+        } catch (SQLException e) {
+            ConsolaColor.error(ConexionBD.traducirErrorSQL(e));
+        }
+    }
+
+    private void modificarProducto() {
+        System.out.println("\nMODIFICAR PRODUCTO");
+        System.out.println("----------------------------------------");
+        System.out.print("Código del producto a modificar: ");
+        String codigo = ValidadorBD.normalizarCodigo(LectorConsola.leerTexto());
+        if (codigo.isEmpty()) {
+            ConsolaColor.error("El código es obligatorio.");
+            return;
+        }
+
+        try {
+            ProductoDetalle actual = productoDAO.buscarPorCodigo(codigo);
+            if (actual == null) {
+                ConsolaColor.error("No existe ningún producto con el código '" + codigo + "'.");
+                return;
+            }
+
+            System.out.println("Valores actuales:");
+            System.out.println(actual.formatearFicha());
+            System.out.println("(Pulsa Intro para conservar cada valor. El código y el stock no se modifican desde aquí)");
+
+            System.out.print("Nuevo nombre [" + actual.getNombre() + "]: ");
+            String entNombre = LectorConsola.leerTexto();
+            String nuevoNombre = entNombre.isEmpty() ? actual.getNombre() : entNombre;
+            String errNombre = ValidadorBD.validarNombreProducto(nuevoNombre);
+            if (errNombre != null) {
+                ConsolaColor.error(errNombre);
+                return;
+            }
+
+            System.out.print("Nuevo precio [" + actual.getPrecio() + "]: ");
+            String entPrecio = LectorConsola.leerTexto();
+            BigDecimal nuevoPrecio = actual.getPrecio();
+            if (!entPrecio.isEmpty()) {
+                try {
+                    nuevoPrecio = ValidadorBD.parsearPrecio(entPrecio);
+                } catch (IllegalArgumentException ex) {
+                    ConsolaColor.error(ex.getMessage());
+                    return;
+                }
+            }
+
+            System.out.print("Nuevo ID de categoría [" + actual.getCategoriaId() + "]: ");
+            String entCat = LectorConsola.leerTexto();
+            int nuevaCatId = actual.getCategoriaId();
+            if (!entCat.isEmpty()) {
+                try {
+                    nuevaCatId = Integer.parseInt(entCat);
+                    if (nuevaCatId <= 0) {
+                        ConsolaColor.error("El ID de categoría debe ser un entero positivo.");
+                        return;
+                    }
+                } catch (NumberFormatException ex) {
+                    ConsolaColor.error("El ID de categoría debe ser un número entero válido.");
+                    return;
+                }
+                if (!categoriaDAO.existeId(nuevaCatId)) {
+                    ConsolaColor.error("No existe la categoría con ID " + nuevaCatId + " en MySQL.");
+                    return;
+                }
+            }
+
+            System.out.print("Nuevo ID de proveedor [" + actual.getProveedorId() + "]: ");
+            String entProv = LectorConsola.leerTexto();
+            int nuevoProvId = actual.getProveedorId();
+            if (!entProv.isEmpty()) {
+                try {
+                    nuevoProvId = Integer.parseInt(entProv);
+                    if (nuevoProvId <= 0) {
+                        ConsolaColor.error("El ID de proveedor debe ser un entero positivo.");
+                        return;
+                    }
+                } catch (NumberFormatException ex) {
+                    ConsolaColor.error("El ID de proveedor debe ser un número entero válido.");
+                    return;
+                }
+                if (!proveedorDAO.existeId(nuevoProvId)) {
+                    ConsolaColor.error("No existe el proveedor con ID " + nuevoProvId + " en MySQL.");
+                    return;
+                }
+            }
+
+            if (!ConsolaColor.confirmar("¿Confirmas guardar los cambios del producto " + codigo + "?")) {
+                System.out.println("Operación cancelada.");
+                return;
+            }
+
+            Producto modificado = new Producto(
+                    codigo, nuevoNombre, nuevoPrecio, actual.getStock(), nuevaCatId, nuevoProvId);
+            int filas = productoDAO.actualizar(modificado);
+            if (filas > 0) {
+                ConsolaColor.ok("Producto " + codigo + " modificado correctamente.");
+            } else {
+                ConsolaColor.aviso("No se modificó ningún registro.");
+            }
+        } catch (SQLException e) {
+            ConsolaColor.error(ConexionBD.traducirErrorSQL(e));
+        }
+    }
+
+    private void eliminarProducto() {
+        System.out.println("\nELIMINAR PRODUCTO");
+        System.out.println("----------------------------------------");
+        System.out.print("Código del producto a eliminar: ");
+        String codigo = ValidadorBD.normalizarCodigo(LectorConsola.leerTexto());
+        if (codigo.isEmpty()) {
+            ConsolaColor.error("El código es obligatorio.");
+            return;
+        }
+
+        try {
+            ProductoDetalle actual = productoDAO.buscarPorCodigo(codigo);
+            if (actual == null) {
+                ConsolaColor.error("No existe ningún producto con el código '" + codigo + "'.");
+                return;
+            }
+
+            System.out.println("Datos del producto a eliminar:");
+            System.out.println(actual.formatearFicha());
+
+            if (!ConsolaColor.confirmar("¿Confirmas la eliminación del producto " + codigo + "?")) {
+                System.out.println("Operación cancelada.");
+                return;
+            }
+
+            int filas = productoDAO.eliminar(codigo);
+            if (filas > 0) {
+                ConsolaColor.ok("Producto " + codigo + " eliminado correctamente.");
+            } else {
+                ConsolaColor.aviso("No existía el producto indicado.");
+            }
+        } catch (SQLException e) {
+            if (e.getErrorCode() == 1451) {
+                ConsolaColor.error("No se puede eliminar el producto " + codigo +
+                        " porque tiene movimientos de stock registrados en el historial.");
+            } else {
+                ConsolaColor.error(ConexionBD.traducirErrorSQL(e));
+            }
+        }
+    }
+
+    // ==================== 7.5 SUBMENÚ DE CONSULTAS DE PRODUCTOS ====================
+
+    private void menuConsultasProductos() {
+        int op = -1;
+        do {
+            System.out.println("\n--- MENÚ DE CONSULTAS ---");
+            System.out.println("1. Listar todos los productos");
+            System.out.println("2. Buscar producto por código");
+            System.out.println("3. Buscar productos por nombre");
+            System.out.println("4. Consultar productos con stock inferior a un umbral");
+            System.out.println("0. Volver al menú MySQL");
+            System.out.print("Selecciona una opción: ");
+
+            op = leerOpcionMenu();
+            switch (op) {
+                case 1:
+                    listarTodosProductosBD();
+                    break;
+                case 2:
+                    consultarProductoPorCodigo();
+                    break;
+                case 3:
+                    buscarProductosPorNombreBD();
+                    break;
+                case 4:
+                    consultarStockInferiorUmbral();
+                    break;
+                case 0:
+                    break;
+                default:
+                    ConsolaColor.aviso("Opción no válida.");
+                    break;
+            }
+        } while (op != 0);
+    }
+
+    private void listarTodosProductosBD() {
+        try {
+            List<ProductoDetalle> lista = productoDAO.listarTodos();
+            if (lista.isEmpty()) {
+                ConsolaColor.aviso("No hay productos almacenados en MySQL.");
+                return;
+            }
+            imprimirTablaProductosDetalle("PRODUCTOS ALMACENADOS EN MYSQL", lista);
+        } catch (SQLException e) {
+            ConsolaColor.error(ConexionBD.traducirErrorSQL(e));
+        }
+    }
+
+    private void buscarProductosPorNombreBD() {
+        System.out.print("Fragmento del nombre a buscar: ");
+        String fragmento = LectorConsola.leerTexto();
+        if (fragmento.isEmpty()) {
+            ConsolaColor.error("Debes introducir un fragmento de texto no vacío.");
+            return;
+        }
+
+        try {
+            List<ProductoDetalle> lista = productoDAO.buscarPorNombre(fragmento);
+            if (lista.isEmpty()) {
+                ConsolaColor.aviso("No se han encontrado productos cuyo nombre contenga '" + fragmento + "'.");
+                return;
+            }
+            imprimirTablaProductosDetalle("RESULTADOS DE BÚSQUEDA POR NOMBRE", lista);
+        } catch (SQLException e) {
+            ConsolaColor.error(ConexionBD.traducirErrorSQL(e));
+        }
+    }
+
+    private void consultarStockInferiorUmbral() {
+        Integer umbral = pedirEnteroNoNegativo("Introduce el umbral de stock (entero >= 0): ");
+        if (umbral == null) return;
+
+        try {
+            List<ProductoDetalle> lista = productoDAO.buscarStockInferior(umbral);
+            if (lista.isEmpty()) {
+                ConsolaColor.aviso("No hay productos con stock estrictamente inferior a " + umbral + ".");
+                return;
+            }
+            imprimirTablaProductosDetalle("PRODUCTOS CON STOCK INFERIOR A " + umbral, lista);
+        } catch (SQLException e) {
+            ConsolaColor.error(ConexionBD.traducirErrorSQL(e));
+        }
+    }
+
+    private void imprimirTablaProductosDetalle(String titulo, List<ProductoDetalle> lista) {
+        System.out.println("\n" + titulo);
+        System.out.println("----------------------------------------------------------------------------------------------------------------");
+        System.out.printf("%-12s | %-28s | %11s | %5s | %-20s | %-22s%n",
+                "CÓDIGO", "NOMBRE", "PRECIO", "STOCK", "CATEGORÍA", "PROVEEDOR");
+        System.out.println("----------------------------------------------------------------------------------------------------------------");
+        for (ProductoDetalle p : lista) {
+            System.out.println(p);
+        }
+        System.out.println("----------------------------------------------------------------------------------------------------------------");
+        System.out.println("Total de productos encontrados: " + lista.size());
     }
 
     // ==================== AUXILIARES DE LECTURA ====================
