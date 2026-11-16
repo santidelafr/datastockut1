@@ -1,15 +1,23 @@
 package es.iesisidra.datastock.ui;
 
 import java.io.File;
+import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
 
+import es.iesisidra.datastock.componente.LectorProductosJson;
 import es.iesisidra.datastock.modelo.Producto;
 import es.iesisidra.datastock.servicio.Inventario;
 import es.iesisidra.datastock.util.ConsolaColor;
 import es.iesisidra.datastock.util.LectorConsola;
 
+/**
+ * Menú principal de DataStock (Opciones 1 a 6 de UT1 y Opción 7 de UT2/UT3).
+ * Integra el componente reutilizable {@link LectorProductosJson} en la opción 2 (UT3).
+ */
 public class MenuPrincipal {
     private final Inventario inventario = new Inventario();
+    private final LectorProductosJson lectorProductosJson = new LectorProductosJson();
     private final MenuMySQL menuMySQL = new MenuMySQL(inventario);
 
     public void iniciar() {
@@ -31,33 +39,15 @@ public class MenuPrincipal {
             try {
                 opcion = Integer.parseInt(LectorConsola.leerTexto());
                 switch (opcion) {
-                    case 1:
-                        explorarRuta();
-                        break;
-                    case 2:
-                        importarJSON();
-                        break;
-                    case 3:
-                        importarXML();
-                        break;
-                    case 4:
-                        menuConsultar();
-                        break;
-                    case 5:
-                        menuExportar();
-                        break;
-                    case 6:
-                        menuSerializacion();
-                        break;
-                    case 7:
-                        menuMySQL.iniciar();
-                        break;
-                    case 0:
-                        System.out.println("¡Hasta pronto!");
-                        break;
-                    default:
-                        ConsolaColor.aviso("Opción no válida.");
-                        break;
+                    case 1 -> explorarRuta();
+                    case 2 -> importarJSON();
+                    case 3 -> importarXML();
+                    case 4 -> menuConsultar();
+                    case 5 -> menuExportar();
+                    case 6 -> menuSerializacion();
+                    case 7 -> menuMySQL.iniciar();
+                    case 0 -> System.out.println("¡Hasta pronto!");
+                    default -> ConsolaColor.aviso("Opción no válida.");
                 }
             } catch (NumberFormatException e) {
                 ConsolaColor.error("Introduce un número válido.");
@@ -69,47 +59,50 @@ public class MenuPrincipal {
 
     private void explorarRuta() {
         System.out.print("Introduce la ruta: ");
-        String entrada = LectorConsola.leerTexto();
-        File file = new File(entrada);
-
+        File file = new File(LectorConsola.leerTexto());
         if (!file.exists()) {
             ConsolaColor.error("La ruta especificada no existe.");
             return;
         }
-
         if (file.isFile()) {
-            System.out.println("[FICHERO] " + file.getName());
-            System.out.println("Ruta absoluta: " + file.getAbsolutePath());
-            System.out.println("Tamaño: " + file.length() + " bytes");
+            System.out.printf("[FICHERO] %s | Ruta: %s | %d bytes%n", file.getName(), file.getAbsolutePath(), file.length());
         } else if (file.isDirectory()) {
-            System.out.println("===== CONTENIDO DEL DIRECTORIO =====");
             File[] hijos = file.listFiles();
             if (hijos == null || hijos.length == 0) {
                 System.out.println("El directorio está vacío.");
                 return;
             }
-            int totalFicheros = 0, totalDirs = 0;
+            int ficheros = 0, dirs = 0;
             for (File f : hijos) {
-                if (f.isDirectory()) {
-                    System.out.printf("[DIR]     %-25s%n", f.getName());
-                    totalDirs++;
-                } else {
-                    System.out.printf("[FICHERO] %-25s %d bytes%n", f.getName(), f.length());
-                    totalFicheros++;
-                }
+                if (f.isDirectory()) { System.out.printf("[DIR]     %-25s%n", f.getName()); dirs++; }
+                else { System.out.printf("[FICHERO] %-25s %d bytes%n", f.getName(), f.length()); ficheros++; }
             }
-            System.out.println("------------------------------------");
-            System.out.println("Total ficheros: " + totalFicheros + " | Directorios: " + totalDirs);
+            System.out.println("Total ficheros: " + ficheros + " | Directorios: " + dirs);
         }
     }
 
+    // Opción 2: Integrada con el componente reutilizable LectorProductosJson (UT3)
     private void importarJSON() {
         System.out.print("Ruta del fichero JSON: ");
         String ruta = LectorConsola.leerTexto();
         try {
-            inventario.importarJSON(ruta);
-            ConsolaColor.ok("Fichero JSON procesado. Productos disponibles en memoria: " +
-                    inventario.getProductos().size());
+            LectorProductosJson.ResultadoLectura res = lectorProductosJson.leerConDetalle(Paths.get(ruta));
+            int importados = 0;
+            List<String> incidencias = new ArrayList<>(res.getIncidencias());
+
+            for (Producto p : res.getProductosValidos()) {
+                if (inventario.agregarProducto(p)) importados++;
+                else incidencias.add("Producto (" + p.getCodigo() + "): código duplicado en memoria.");
+            }
+
+            int encontrados = res.getTotalEncontrados();
+            System.out.println("Productos encontrados: " + encontrados);
+            System.out.println("Importados: " + importados + " | Rechazados: " + (encontrados - importados));
+            if (!incidencias.isEmpty()) {
+                ConsolaColor.aviso("Incidencias detectadas:");
+                incidencias.forEach(inc -> System.out.println(" - " + inc));
+            }
+            ConsolaColor.ok("Fichero JSON procesado. Productos disponibles en memoria: " + inventario.getProductos().size());
         } catch (Exception e) {
             ConsolaColor.error("Error al importar JSON: " + e.getMessage());
         }
@@ -117,11 +110,9 @@ public class MenuPrincipal {
 
     private void importarXML() {
         System.out.print("Ruta del fichero XML: ");
-        String ruta = LectorConsola.leerTexto();
         try {
-            inventario.importarXML(ruta);
-            ConsolaColor.ok("Fichero XML procesado. Productos disponibles en memoria: " +
-                    inventario.getProductos().size());
+            inventario.importarXML(LectorConsola.leerTexto());
+            ConsolaColor.ok("Fichero XML procesado. Productos disponibles en memoria: " + inventario.getProductos().size());
         } catch (Exception e) {
             ConsolaColor.error("Error al importar XML: " + e.getMessage());
         }
@@ -130,49 +121,30 @@ public class MenuPrincipal {
     private void menuConsultar() {
         int sub = -1;
         do {
-            System.out.println("\n--- CONSULTA DEL INVENTARIO EN MEMORIA (UT1) ---");
-            System.out.println("1. Listar todos los productos");
-            System.out.println("2. Buscar producto por código");
-            System.out.println("3. Buscar productos por nombre");
-            System.out.println("0. Volver al menú principal");
+            System.out.println("\n--- CONSULTA EN MEMORIA (UT1) ---");
+            System.out.println("1. Listar todos | 2. Buscar por código | 3. Buscar por nombre | 0. Volver");
             System.out.print("Selecciona opción: ");
             try {
                 sub = Integer.parseInt(LectorConsola.leerTexto());
                 switch (sub) {
-                    case 1:
+                    case 1 -> {
                         List<Producto> todos = inventario.listarOrdenados();
-                        if (todos.isEmpty()) {
-                            System.out.println("No hay productos cargados en memoria.");
-                        } else {
-                            todos.forEach(System.out::println);
-                            System.out.println("Total en memoria: " + todos.size());
-                        }
-                        break;
-                    case 2:
+                        if (todos.isEmpty()) System.out.println("No hay productos en memoria.");
+                        else { todos.forEach(System.out::println); System.out.println("Total: " + todos.size()); }
+                    }
+                    case 2 -> {
                         System.out.print("Código: ");
-                        String cod = LectorConsola.leerTexto();
-                        Producto encontrado = inventario.buscarPorCodigo(cod);
-                        if (encontrado == null) {
-                            System.out.println("No se encontró ningún producto en memoria con ese código.");
-                        } else {
-                            System.out.println(encontrado);
-                        }
-                        break;
-                    case 3:
+                        Producto p = inventario.buscarPorCodigo(LectorConsola.leerTexto());
+                        System.out.println(p != null ? p : "No se encontró ningún producto con ese código.");
+                    }
+                    case 3 -> {
                         System.out.print("Nombre a buscar: ");
-                        String nom = LectorConsola.leerTexto();
-                        List<Producto> coincidencias = inventario.buscarPorNombre(nom);
-                        if (coincidencias.isEmpty()) {
-                            System.out.println("No se encontraron coincidencias en memoria.");
-                        } else {
-                            coincidencias.forEach(System.out::println);
-                        }
-                        break;
-                    case 0:
-                        break;
-                    default:
-                        ConsolaColor.aviso("Opción inválida.");
-                        break;
+                        List<Producto> lista = inventario.buscarPorNombre(LectorConsola.leerTexto());
+                        if (lista.isEmpty()) System.out.println("No se encontraron coincidencias.");
+                        else lista.forEach(System.out::println);
+                    }
+                    case 0 -> {}
+                    default -> ConsolaColor.aviso("Opción inválida.");
                 }
             } catch (Exception e) {
                 ConsolaColor.error("Entrada inválida.");
@@ -181,28 +153,16 @@ public class MenuPrincipal {
     }
 
     private void menuExportar() {
-        System.out.println("\n--- EXPORTAR PRODUCTOS ---");
-        System.out.println("1. Exportar a JSON");
-        System.out.println("2. Exportar a XML");
-        System.out.println("0. Volver");
+        System.out.println("\n--- EXPORTAR PRODUCTOS (1. JSON | 2. XML | 0. Volver) ---");
         System.out.print("Opción: ");
         try {
             int op = Integer.parseInt(LectorConsola.leerTexto());
             if (op == 1 || op == 2) {
                 System.out.print("Ruta de destino: ");
                 String ruta = LectorConsola.leerTexto();
-                File f = new File(ruta);
-                if (f.exists()) {
-                    if (!ConsolaColor.confirmar("El fichero ya existe. ¿Sobrescribir?")) {
-                        System.out.println("Operación cancelada.");
-                        return;
-                    }
-                }
-                if (op == 1) {
-                    inventario.exportarJSON(ruta);
-                } else {
-                    inventario.exportarXML(ruta);
-                }
+                if (new File(ruta).exists() && !ConsolaColor.confirmar("El fichero ya existe. ¿Sobrescribir?")) return;
+                if (op == 1) inventario.exportarJSON(ruta);
+                else inventario.exportarXML(ruta);
                 ConsolaColor.ok("Exportación realizada con éxito.");
             }
         } catch (Exception e) {
@@ -211,25 +171,21 @@ public class MenuPrincipal {
     }
 
     private void menuSerializacion() {
-        System.out.println("\n--- GUARDAR Y RECUPERAR INVENTARIO ---");
-        System.out.println("1. Guardar inventario en fichero.dat");
-        System.out.println("2. Recuperar inventario desde fichero.dat");
-        System.out.println("0. Volver");
+        System.out.println("\n--- SERIALIZACIÓN (1. Guardar .dat | 2. Recuperar .dat | 0. Volver) ---");
         System.out.print("Opción: ");
         try {
             int op = Integer.parseInt(LectorConsola.leerTexto());
             if (op == 1) {
                 System.out.print("Ruta de destino (.dat): ");
                 String ruta = LectorConsola.leerTexto();
-                File f = new File(ruta);
-                if (f.exists()) {
-                    if (!ConsolaColor.confirmar("Fichero existente. ¿Sobrescribir?")) return;
-                }
+                if (new File(ruta).exists() && !ConsolaColor.confirmar("Fichero existente. ¿Sobrescribir?")) return;
                 inventario.guardarSerializado(ruta);
                 ConsolaColor.ok("Inventario guardado correctamente.");
             } else if (op == 2) {
                 System.out.print("Ruta del fichero .dat: ");
                 String ruta = LectorConsola.leerTexto();
+                if (!inventario.getProductos().isEmpty()
+                        && !ConsolaColor.confirmar("La memoria no está vacía. ¿Sustituirla por el .dat?")) return;
                 inventario.recuperarSerializado(ruta);
                 ConsolaColor.ok("Inventario recuperado correctamente.");
             }
