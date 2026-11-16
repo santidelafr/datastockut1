@@ -10,96 +10,69 @@ import java.util.List;
 import es.iesisidra.datastock.config.ConexionBD;
 import es.iesisidra.datastock.modelo.Categoria;
 
-/**
- * Operaciones JDBC sobre la tabla categoria (RF-JDBC-02).
- */
+/** Operaciones JDBC sobre la tabla categoria (RF-JDBC-02). */
 public class CategoriaDAO {
 
     public boolean existeId(int id) throws SQLException {
-        String sql = "SELECT 1 FROM categoria WHERE id = ?";
-        try (Connection conn = ConexionBD.obtenerConexion();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, id);
-            try (ResultSet rs = ps.executeQuery()) {
-                return rs.next();
-            }
-        }
+        try (Connection c = ConexionBD.obtenerConexion()) { return existeId(c, id); }
     }
 
-    public boolean existeId(Connection conn, int id) throws SQLException {
-        String sql = "SELECT 1 FROM categoria WHERE id = ?";
-        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+    public boolean existeId(Connection c, int id) throws SQLException {
+        try (PreparedStatement ps = c.prepareStatement("SELECT 1 FROM categoria WHERE id = ?")) {
             ps.setInt(1, id);
-            try (ResultSet rs = ps.executeQuery()) {
-                return rs.next();
-            }
+            try (ResultSet rs = ps.executeQuery()) { return rs.next(); }
         }
     }
 
     public boolean existeNombre(String nombre) throws SQLException {
-        String sql = "SELECT 1 FROM categoria WHERE LOWER(nombre) = LOWER(?)";
-        try (Connection conn = ConexionBD.obtenerConexion();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
+        try (Connection c = ConexionBD.obtenerConexion();
+             PreparedStatement ps = c.prepareStatement("SELECT 1 FROM categoria WHERE LOWER(nombre) = LOWER(?)")) {
             ps.setString(1, nombre.trim());
-            try (ResultSet rs = ps.executeQuery()) {
-                return rs.next();
-            }
+            try (ResultSet rs = ps.executeQuery()) { return rs.next(); }
         }
     }
 
     public boolean existeNombreEnOtra(String nombre, int idActual) throws SQLException {
-        String sql = "SELECT 1 FROM categoria WHERE LOWER(nombre) = LOWER(?) AND id <> ?";
-        try (Connection conn = ConexionBD.obtenerConexion();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
+        try (Connection c = ConexionBD.obtenerConexion();
+             PreparedStatement ps = c.prepareStatement("SELECT 1 FROM categoria WHERE LOWER(nombre) = LOWER(?) AND id <> ?")) {
             ps.setString(1, nombre.trim());
             ps.setInt(2, idActual);
-            try (ResultSet rs = ps.executeQuery()) {
-                return rs.next();
-            }
+            try (ResultSet rs = ps.executeQuery()) { return rs.next(); }
         }
     }
 
     public Categoria buscarPorId(int id) throws SQLException {
-        String sql = "SELECT id, nombre FROM categoria WHERE id = ?";
-        try (Connection conn = ConexionBD.obtenerConexion();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
+        try (Connection c = ConexionBD.obtenerConexion();
+             PreparedStatement ps = c.prepareStatement("SELECT id, nombre FROM categoria WHERE id = ?")) {
             ps.setInt(1, id);
             try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    return new Categoria(rs.getInt("id"), rs.getString("nombre"));
-                }
-                return null;
+                return rs.next() ? new Categoria(rs.getInt("id"), rs.getString("nombre")) : null;
             }
         }
     }
 
     public List<Categoria> listarTodas() throws SQLException {
-        String sql = "SELECT id, nombre FROM categoria ORDER BY id ASC";
         List<Categoria> lista = new ArrayList<>();
-        try (Connection conn = ConexionBD.obtenerConexion();
-             PreparedStatement ps = conn.prepareStatement(sql);
+        try (Connection c = ConexionBD.obtenerConexion();
+             PreparedStatement ps = c.prepareStatement("SELECT id, nombre FROM categoria ORDER BY id ASC");
              ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) {
-                lista.add(new Categoria(rs.getInt("id"), rs.getString("nombre")));
-            }
+            while (rs.next()) lista.add(new Categoria(rs.getInt("id"), rs.getString("nombre")));
         }
         return lista;
     }
 
-    public int insertar(Categoria categoria) throws SQLException {
-        String sql = "INSERT INTO categoria (id, nombre) VALUES (?, ?)";
-        try (Connection conn = ConexionBD.obtenerConexion();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, categoria.getId());
-            ps.setString(2, categoria.getNombre().trim());
+    public int insertar(Categoria cat) throws SQLException {
+        try (Connection c = ConexionBD.obtenerConexion();
+             PreparedStatement ps = c.prepareStatement("INSERT INTO categoria (id, nombre) VALUES (?, ?)")) {
+            ps.setInt(1, cat.getId());
+            ps.setString(2, cat.getNombre().trim());
             return ps.executeUpdate();
         }
     }
 
     public int actualizarNombre(int id, String nuevoNombre) throws SQLException {
-        String sql = "UPDATE categoria SET nombre = ? WHERE id = ?";
-        try (Connection conn = ConexionBD.obtenerConexion();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
+        try (Connection c = ConexionBD.obtenerConexion();
+             PreparedStatement ps = c.prepareStatement("UPDATE categoria SET nombre = ? WHERE id = ?")) {
             ps.setString(1, nuevoNombre.trim());
             ps.setInt(2, id);
             return ps.executeUpdate();
@@ -107,26 +80,17 @@ public class CategoriaDAO {
     }
 
     public int eliminar(int id) throws SQLException {
-        String sql = "DELETE FROM categoria WHERE id = ?";
-        try (Connection conn = ConexionBD.obtenerConexion();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
+        try (Connection c = ConexionBD.obtenerConexion();
+             PreparedStatement ps = c.prepareStatement("DELETE FROM categoria WHERE id = ?")) {
             ps.setInt(1, id);
             return ps.executeUpdate();
         }
     }
 
-    /**
-     * Busca identificadores altos libres (a partir de un valor inicial) para
-     * emplearlos de forma segura en la demostración de transacciones (RF-JDBC-08).
-     */
-    public List<Integer> buscarIdsLibres(Connection conn, int desdeId, int cantidad) throws SQLException {
+    public List<Integer> buscarIdsLibres(Connection c, int desdeId, int cantidad) throws SQLException {
         List<Integer> libres = new ArrayList<>();
-        int candidato = desdeId;
-        while (libres.size() < cantidad) {
-            if (!existeId(conn, candidato)) {
-                libres.add(candidato);
-            }
-            candidato++;
+        for (int id = desdeId; libres.size() < cantidad; id++) {
+            if (!existeId(c, id)) libres.add(id);
         }
         return libres;
     }

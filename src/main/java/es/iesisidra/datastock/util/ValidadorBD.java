@@ -4,8 +4,7 @@ import java.math.BigDecimal;
 import java.util.regex.Pattern;
 
 /**
- * Validaciones previas en Java acordes a las restricciones definidas
- * en el esquema MySQL de DataStock (UT2 - apartado 3.1).
+ * Validaciones previas en Java acordes al esquema MySQL de DataStock (UT2 / UT3).
  */
 public class ValidadorBD {
     private static final Pattern PATRON_CODIGO = Pattern.compile("^[A-Z0-9-]{1,12}$");
@@ -15,31 +14,19 @@ public class ValidadorBD {
     private ValidadorBD() {}
 
     public static String normalizarCodigo(String codigo) {
-        if (codigo == null) {
-            return "";
-        }
-        return codigo.trim().toUpperCase();
+        return codigo == null ? "" : codigo.trim().toUpperCase();
     }
 
-    public static String validarCodigoProducto(String codigoNormalizado) {
-        if (codigoNormalizado == null || codigoNormalizado.isEmpty()) {
-            return "El código del producto es obligatorio.";
-        }
-        if (codigoNormalizado.length() > 12) {
-            return "El código supera la longitud máxima permitida (12 caracteres).";
-        }
-        if (!PATRON_CODIGO.matcher(codigoNormalizado).matches()) {
-            return "El código solo puede contener letras mayúsculas (A-Z), números (0-9) y guiones (-).";
+    public static String validarCodigoProducto(String cod) {
+        if (cod == null || cod.isEmpty()) return "El código del producto es obligatorio.";
+        if (cod.length() > 12 || !PATRON_CODIGO.matcher(cod).matches()) {
+            return "El código debe tener entre 1 y 12 caracteres (A-Z, 0-9 o guion).";
         }
         return null;
     }
 
     public static String validarNombreProducto(String nombre) {
-        if (nombre == null || nombre.trim().isEmpty()) {
-            return "El nombre del producto no puede estar vacío.";
-        }
-        int len = nombre.trim().length();
-        if (len < 3 || len > 100) {
+        if (nombre == null || nombre.trim().length() < 3 || nombre.trim().length() > 100) {
             return "El nombre del producto debe tener entre 3 y 100 caracteres.";
         }
         return null;
@@ -49,77 +36,41 @@ public class ValidadorBD {
         if (entrada == null || entrada.trim().isEmpty()) {
             throw new IllegalArgumentException("El precio es obligatorio.");
         }
-        String limpio = entrada.trim();
-        if (!limpio.contains(".")) {
-            limpio = limpio.replace(',', '.');
-        }
-        BigDecimal precio;
+        String limpio = entrada.trim().contains(".") ? entrada.trim() : entrada.trim().replace(',', '.');
         try {
-            precio = new BigDecimal(limpio);
+            BigDecimal precio = new BigDecimal(limpio);
+            String err = validarPrecio(precio);
+            if (err != null) throw new IllegalArgumentException(err);
+            return precio;
         } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("El precio introducido no es un número decimal válido.");
+            throw new IllegalArgumentException("El precio no es un número decimal válido.");
         }
-        String error = validarPrecio(precio);
-        if (error != null) {
-            throw new IllegalArgumentException(error);
-        }
-        return precio;
     }
 
-    public static String validarPrecio(BigDecimal precio) {
-        if (precio == null) {
-            return "El precio es obligatorio.";
-        }
-        if (precio.compareTo(BigDecimal.ZERO) <= 0) {
-            return "El precio debe ser mayor que 0.";
-        }
-        if (precio.scale() > 2) {
-            return "El precio admite como máximo dos cifras decimales.";
-        }
-        if (precio.compareTo(MAX_PRECIO) > 0) {
-            return "El precio supera el rango máximo permitido por DECIMAL(10,2).";
-        }
+    public static String validarPrecio(BigDecimal p) {
+        if (p == null || p.compareTo(BigDecimal.ZERO) <= 0) return "El precio debe ser mayor que 0.";
+        if (p.scale() > 2 || p.compareTo(MAX_PRECIO) > 0) return "El precio supera el formato DECIMAL(10,2).";
         return null;
     }
 
     public static String validarStock(int stock) {
-        if (stock < 0) {
-            return "El stock no puede ser negativo.";
-        }
-        return null;
+        return stock < 0 ? "El stock no puede ser negativo." : null;
     }
 
-    public static String validarNombreCategoria(String nombre) {
-        if (nombre == null || nombre.trim().isEmpty()) {
-            return "El nombre de la categoría es obligatorio.";
-        }
-        if (nombre.trim().length() > 60) {
-            return "El nombre de la categoría no puede superar los 60 caracteres.";
-        }
-        return null;
+    public static String validarNombreCategoria(String n) {
+        return (n == null || n.trim().isEmpty() || n.trim().length() > 60)
+                ? "El nombre de categoría es obligatorio (máx. 60 caracteres)." : null;
     }
 
-    public static String validarNombreProveedor(String nombre) {
-        if (nombre == null || nombre.trim().isEmpty()) {
-            return "El nombre del proveedor es obligatorio.";
-        }
-        if (nombre.trim().length() > 100) {
-            return "El nombre del proveedor no puede superar los 100 caracteres.";
-        }
-        return null;
+    public static String validarNombreProveedor(String n) {
+        return (n == null || n.trim().isEmpty() || n.trim().length() > 100)
+                ? "El nombre de proveedor es obligatorio (máx. 100 caracteres)." : null;
     }
 
     public static String validarEmailProveedor(String email) {
-        if (email == null || email.trim().isEmpty()) {
-            return null; // El correo es opcional
-        }
-        String limpio = email.trim();
-        if (limpio.length() > 120) {
-            return "El correo electrónico no puede superar los 120 caracteres.";
-        }
-        if (!PATRON_EMAIL.matcher(limpio).matches()) {
-            return "El correo electrónico no tiene un formato válido (ejemplo: usuario@dominio.com).";
-        }
-        return null;
+        if (email == null || email.trim().isEmpty()) return null;
+        String e = email.trim();
+        return (e.length() > 120 || !PATRON_EMAIL.matcher(e).matches())
+                ? "Formato de email inválido (ej: usuario@dominio.com)." : null;
     }
 }
